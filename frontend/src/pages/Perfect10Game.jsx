@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import BottomNav from "@/components/BottomNav";
 import { ArrowLeft, Flame, Trophy, RotateCcw } from "lucide-react";
 
+const TARGET_TIME = 5; // Target time in seconds
+
 export default function Perfect10Game() {
   const [gameState, setGameState] = useState("idle"); // idle, running, stopped
   const [time, setTime] = useState(0);
@@ -21,7 +23,7 @@ export default function Perfect10Game() {
       return;
     }
     // Load best time from localStorage
-    const stored = localStorage.getItem("perfect10_best");
+    const stored = localStorage.getItem("perfect5_best");
     if (stored) setBestTime(parseFloat(stored));
   }, [navigate]);
 
@@ -29,10 +31,10 @@ export default function Perfect10Game() {
     if (startTimeRef.current) {
       const elapsed = (performance.now() - startTimeRef.current) / 1000;
       setTime(elapsed);
-      if (elapsed < 15) {
+      if (elapsed < 10) {
         animationFrameRef.current = requestAnimationFrame(updateTimer);
       } else {
-        // Auto stop at 15 seconds
+        // Auto stop at 10 seconds
         handleStop();
       }
     }
@@ -57,8 +59,8 @@ export default function Perfect10Game() {
       : time;
     setTime(finalTime);
 
-    // Calculate result
-    const diff = Math.abs(finalTime - 10);
+    // Calculate result based on TARGET_TIME (5 seconds)
+    const diff = Math.abs(finalTime - TARGET_TIME);
     let resultData = { time: finalTime, diff };
 
     if (diff <= 0.01) {
@@ -71,19 +73,19 @@ export default function Perfect10Game() {
       resultData.emoji = "🔥";
       resultData.color = "text-amber-600";
       resultData.bgColor = "bg-amber-100";
-    } else if (diff <= 0.5) {
+    } else if (diff <= 0.3) {
       resultData.rating = "Great Timing!";
       resultData.emoji = "👍";
       resultData.color = "text-orange-600";
       resultData.bgColor = "bg-orange-100";
-    } else if (diff <= 1) {
+    } else if (diff <= 0.5) {
       resultData.rating = "Good Try!";
       resultData.emoji = "😊";
       resultData.color = "text-blue-600";
       resultData.bgColor = "bg-blue-100";
     } else {
-      resultData.rating = finalTime < 10 ? "Too Early!" : "Overbaked!";
-      resultData.emoji = finalTime < 10 ? "⏰" : "🔥";
+      resultData.rating = finalTime < TARGET_TIME ? "Too Early!" : "Overbaked!";
+      resultData.emoji = finalTime < TARGET_TIME ? "⏰" : "🔥";
       resultData.color = "text-rose-600";
       resultData.bgColor = "bg-rose-100";
     }
@@ -91,9 +93,9 @@ export default function Perfect10Game() {
     setResult(resultData);
 
     // Update best time
-    if (!bestTime || diff < Math.abs(bestTime - 10)) {
+    if (!bestTime || diff < Math.abs(bestTime - TARGET_TIME)) {
       setBestTime(finalTime);
-      localStorage.setItem("perfect10_best", finalTime.toString());
+      localStorage.setItem("perfect5_best", finalTime.toString());
     }
   };
 
@@ -110,24 +112,24 @@ export default function Perfect10Game() {
 
   const getOvenGlow = () => {
     if (gameState !== "running") return "";
-    if (time >= 9.5 && time <= 10.5) return "animate-pulse-glow";
+    if (time >= 4.5 && time <= 5.5) return "animate-pulse-glow";
     return "";
   };
 
   return (
-    <div className="app-container min-h-screen pb-safe bg-gradient-to-b from-amber-900 to-orange-900">
+    <div className="app-container min-h-screen pb-safe bg-gradient-to-b from-amber-100 to-orange-100">
       {/* Header */}
       <div className="p-4 flex items-center justify-between">
         <Button
           data-testid="back-btn"
           variant="ghost"
           onClick={() => navigate("/dashboard")}
-          className="p-2 text-white hover:bg-white/10"
+          className="p-2 text-amber-800 hover:bg-amber-200"
         >
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="font-heading text-xl font-bold text-white">
-          Perfect 10 Challenge
+        <h1 className="font-heading text-xl font-bold text-amber-800">
+          Perfect 5 Challenge
         </h1>
         <div className="w-10" />
       </div>
@@ -135,11 +137,11 @@ export default function Perfect10Game() {
       {/* Game Area */}
       <div className="px-6 py-4">
         {/* Instructions */}
-        <Card className="border-0 bg-white/10 backdrop-blur-sm mb-6">
+        <Card className="border-0 bg-white shadow-lg mb-6">
           <CardContent className="p-4 text-center">
-            <p className="text-amber-100 text-sm">
-              <Flame className="w-4 h-4 inline mr-1" />
-              Stop the oven at exactly <span className="font-bold text-white">10.00 seconds</span> for the perfect bake!
+            <p className="text-amber-700 text-sm">
+              <Flame className="w-4 h-4 inline mr-1 text-orange-500" />
+              Stop the oven at exactly <span className="font-bold text-amber-900">5.00 seconds</span> for the perfect bake!
             </p>
           </CardContent>
         </Card>
@@ -147,24 +149,24 @@ export default function Perfect10Game() {
         {/* Oven Display */}
         <div className={`relative mx-auto w-64 h-64 bg-gradient-to-b from-gray-800 to-gray-900 rounded-3xl shadow-2xl ${getOvenGlow()} oven-glow`}>
           {/* Oven window */}
-          <div className="absolute inset-4 bg-gradient-to-b from-amber-600/20 to-orange-600/40 rounded-2xl border-4 border-gray-700 flex items-center justify-center">
+          <div className="absolute inset-4 bg-gradient-to-b from-amber-600/30 to-orange-600/50 rounded-2xl border-4 border-gray-700 flex items-center justify-center">
             {/* Timer Display */}
             <div className="text-center">
               <p
                 data-testid="timer-display"
                 className={`timer-display ${
                   gameState === "running"
-                    ? time >= 9.5 && time <= 10.5
+                    ? time >= 4.5 && time <= 5.5
                       ? "text-green-400"
-                      : "text-amber-400"
+                      : "text-white"
                     : result
-                    ? result.color.replace("text-", "text-")
-                    : "text-gray-400"
+                    ? "text-white"
+                    : "text-white"
                 }`}
               >
                 {formatTime(time)}
               </p>
-              <p className="text-gray-400 text-sm mt-2">seconds</p>
+              <p className="text-amber-200 text-sm mt-2">seconds</p>
             </div>
           </div>
 
@@ -232,17 +234,17 @@ export default function Perfect10Game() {
         {/* Best Time */}
         {bestTime && (
           <div className="mt-6 text-center">
-            <div className="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span className="text-amber-100 text-sm">
-                Personal Best: <span className="font-bold text-white">{formatTime(bestTime)}s</span>
+            <div className="inline-flex items-center gap-2 bg-amber-200 px-4 py-2 rounded-full">
+              <Trophy className="w-4 h-4 text-amber-700" />
+              <span className="text-amber-800 text-sm">
+                Personal Best: <span className="font-bold text-amber-900">{formatTime(bestTime)}s</span>
               </span>
             </div>
           </div>
         )}
 
         {/* Note */}
-        <p className="text-center text-amber-200/60 text-xs mt-8 px-6">
+        <p className="text-center text-amber-700 text-xs mt-8 px-6">
           This game is just for fun! Points are earned through purchases at the store.
         </p>
       </div>
