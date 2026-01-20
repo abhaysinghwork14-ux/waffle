@@ -29,6 +29,7 @@ import {
   CheckCircle,
   Clock,
   Star,
+  UserPlus,
 } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -39,7 +40,10 @@ export default function AdminDashboard() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [pointsToAdd, setPointsToAdd] = useState("");
   const [reason, setReason] = useState("Purchase");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserPoints, setNewUserPoints] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -61,6 +65,34 @@ export default function AdminDashboard() {
       setRedemptions(redemptionsRes.data);
     } catch (error) {
       toast.error("Failed to load data");
+    }
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!newUserName.trim()) {
+      toast.error("Please enter a name for the new user");
+      return;
+    }
+    const points = parseInt(newUserPoints) || 0;
+    if (points < 0) {
+      toast.error("Points cannot be negative");
+      return;
+    }
+    setIsCreatingUser(true);
+    try {
+      await axios.post(`${API}/admin/create-user`, {
+        name: newUserName.trim(),
+        points,
+      });
+      toast.success(`User "${newUserName}" created with ${points} Pop Points!`);
+      setNewUserName("");
+      setNewUserPoints("");
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create user");
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -187,8 +219,12 @@ export default function AdminDashboard() {
         </div>
 
         {/* Main Tabs */}
-        <Tabs defaultValue="add-points" className="space-y-4">
+        <Tabs defaultValue="add-user" className="space-y-4">
           <TabsList className="bg-white border">
+            <TabsTrigger value="add-user" className="data-[state=active]:bg-amber-100">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add User
+            </TabsTrigger>
             <TabsTrigger value="add-points" className="data-[state=active]:bg-amber-100">
               <PlusCircle className="w-4 h-4 mr-2" />
               Add Points
@@ -202,6 +238,58 @@ export default function AdminDashboard() {
               All Members
             </TabsTrigger>
           </TabsList>
+
+          {/* Add User Tab */}
+          <TabsContent value="add-user">
+            <Card>
+              <CardHeader>
+                <CardTitle className="font-heading text-amber-800">
+                  Add New User
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleCreateUser} className="space-y-4 max-w-md">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      User Name *
+                    </label>
+                    <Input
+                      data-testid="new-user-name-input"
+                      type="text"
+                      placeholder="Enter customer name"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Initial Pop Points (optional)
+                    </label>
+                    <Input
+                      data-testid="new-user-points-input"
+                      type="number"
+                      placeholder="e.g., 100"
+                      value={newUserPoints}
+                      onChange={(e) => setNewUserPoints(e.target.value)}
+                      min="0"
+                      className="w-full"
+                    />
+                  </div>
+
+                  <Button
+                    data-testid="create-user-btn"
+                    type="submit"
+                    disabled={isCreatingUser || !newUserName.trim()}
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    {isCreatingUser ? "Creating..." : "Create User"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Add Points Tab */}
           <TabsContent value="add-points">
