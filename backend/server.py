@@ -1,7 +1,9 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Depends
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 import os
 import logging
 import random
@@ -9,16 +11,13 @@ import string
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
-import uuid
 from datetime import datetime, timezone
+
+from database import get_db, engine, Base
+from models import User, Redemption, PointTransaction
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
-
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
 
 # Create the main app
 app = FastAPI()
@@ -26,18 +25,22 @@ app = FastAPI()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# ==================== MODELS ====================
+# ==================== PYDANTIC MODELS ====================
 
-class User(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
     name: str
-    current_points: int = 0
-    lifetime_points: int = 0
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    current_points: int
+    lifetime_points: int
+    created_at: datetime
 
 class UserCreate(BaseModel):
     name: str
+
+class UserCreateWithPoints(BaseModel):
+    name: str
+    points: int = 0
 
 class UserLogin(BaseModel):
     name: str
@@ -58,18 +61,18 @@ class RewardItem(BaseModel):
     tier: int
     image_url: str
 
-class Redemption(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+class RedemptionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
     user_id: str
     user_name: str
     reward_id: str
     reward_name: str
     points_spent: int
     reward_code: str
-    claimed: bool = False
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    claimed_at: Optional[str] = None
+    claimed: bool
+    created_at: datetime
+    claimed_at: Optional[datetime]
 
 class RedeemRequest(BaseModel):
     user_id: str
@@ -78,15 +81,15 @@ class RedeemRequest(BaseModel):
 class MarkClaimedRequest(BaseModel):
     redemption_id: str
 
-class PointTransaction(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+class PointTransactionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
     user_id: str
     user_name: str
     points: int
     reason: str
-    transaction_type: str  # "earned" or "spent"
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    transaction_type: str
+    created_at: datetime
 
 # ==================== REWARDS CATALOG ====================
 
@@ -146,35 +149,44 @@ def generate_reward_code(reward_name: str) -> str:
 async def root():
     return {"message": "The Waffle Pop Co API"}
 
-@api_router.post("/users/register", response_model=User)
-async def register_user(input: UserCreate):
-    # Check if user already exists
-    existing = await db.users.find_one({"name": {"$regex": f"^{input.name}$", "$options": "i"}}, {"_id": 0})
+@api_router.post("/users/register", response_model=UserResponse)
+async def register_user(input: UserCreate, db: AsyncSession = Depends(get_db)):
+    # Check if user already exists (case insensitive)
+    result = await db.execute(
+        select(User).where(func.lower(User.name) == input.name.lower())
+    )
+    existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="User with this name already exists")
     
     user = User(name=input.name)
-    doc = user.model_dump()
-    await db.users.insert_one(doc)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
-@api_router.post("/users/login", response_model=User)
-async def login_user(input: UserLogin):
-    user = await db.users.find_one({"name": {"$regex": f"^{input.name}$", "$options": "i"}}, {"_id": 0})
+@api_router.post("/users/login", response_model=UserResponse)
+async def login_user(input: UserLogin, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(User).where(func.lower(User.name) == input.name.lower())
+    )
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please register first.")
     return user
 
-@api_router.get("/users/{user_id}", response_model=User)
-async def get_user(user_id: str):
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+@api_router.get("/users/{user_id}", response_model=UserResponse)
+async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@api_router.get("/users", response_model=List[User])
-async def get_all_users():
-    users = await db.users.find({}, {"_id": 0}).to_list(1000)
+@api_router.get("/users", response_model=List[UserResponse])
+async def get_all_users(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).order_by(User.name))
+    users = result.scalars().all()
     return users
 
 # ==================== ADMIN ROUTES ====================
@@ -185,36 +197,69 @@ async def admin_login(input: AdminLogin):
         raise HTTPException(status_code=401, detail="Invalid admin password")
     return {"success": True, "message": "Admin login successful"}
 
+@api_router.post("/admin/create-user", response_model=UserResponse)
+async def create_user_with_points(input: UserCreateWithPoints, db: AsyncSession = Depends(get_db)):
+    # Check if user already exists
+    result = await db.execute(
+        select(User).where(func.lower(User.name) == input.name.lower())
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail="User with this name already exists")
+    
+    user = User(
+        name=input.name,
+        current_points=input.points,
+        lifetime_points=input.points
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    
+    # Log transaction if points > 0
+    if input.points > 0:
+        transaction = PointTransaction(
+            user_id=user.id,
+            user_name=user.name,
+            points=input.points,
+            reason="Initial Points",
+            transaction_type="earned"
+        )
+        db.add(transaction)
+        await db.commit()
+    
+    return user
+
 @api_router.post("/admin/add-points")
-async def add_points(input: AddPointsRequest):
-    user = await db.users.find_one({"id": input.user_id}, {"_id": 0})
+async def add_points(input: AddPointsRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == input.user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    new_current = user["current_points"] + input.points
-    new_lifetime = user["lifetime_points"] + input.points
-    
-    await db.users.update_one(
-        {"id": input.user_id},
-        {"$set": {"current_points": new_current, "lifetime_points": new_lifetime}}
-    )
+    user.current_points += input.points
+    user.lifetime_points += input.points
     
     # Log transaction
     transaction = PointTransaction(
-        user_id=input.user_id,
-        user_name=user["name"],
+        user_id=user.id,
+        user_name=user.name,
         points=input.points,
         reason=input.reason,
         transaction_type="earned"
     )
-    await db.transactions.insert_one(transaction.model_dump())
+    db.add(transaction)
+    await db.commit()
+    await db.refresh(user)
     
-    updated_user = await db.users.find_one({"id": input.user_id}, {"_id": 0})
-    return {"success": True, "user": updated_user}
+    return {"success": True, "user": UserResponse.model_validate(user)}
 
-@api_router.get("/admin/transactions", response_model=List[PointTransaction])
-async def get_transactions():
-    transactions = await db.transactions.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+@api_router.get("/admin/transactions", response_model=List[PointTransactionResponse])
+async def get_transactions(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(PointTransaction).order_by(PointTransaction.created_at.desc()).limit(500)
+    )
+    transactions = result.scalars().all()
     return transactions
 
 # ==================== REWARDS ROUTES ====================
@@ -224,8 +269,9 @@ async def get_rewards():
     return REWARDS_CATALOG
 
 @api_router.post("/rewards/redeem")
-async def redeem_reward(input: RedeemRequest):
-    user = await db.users.find_one({"id": input.user_id}, {"_id": 0})
+async def redeem_reward(input: RedeemRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == input.user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -233,81 +279,91 @@ async def redeem_reward(input: RedeemRequest):
     if not reward:
         raise HTTPException(status_code=404, detail="Reward not found")
     
-    if user["current_points"] < reward.points_required:
+    if user.current_points < reward.points_required:
         raise HTTPException(status_code=400, detail="Insufficient points")
     
     # Deduct points
-    new_points = user["current_points"] - reward.points_required
-    await db.users.update_one(
-        {"id": input.user_id},
-        {"$set": {"current_points": new_points}}
-    )
+    user.current_points -= reward.points_required
     
     # Create redemption record
     reward_code = generate_reward_code(reward.name)
     redemption = Redemption(
-        user_id=input.user_id,
-        user_name=user["name"],
+        user_id=user.id,
+        user_name=user.name,
         reward_id=reward.id,
         reward_name=reward.name,
         points_spent=reward.points_required,
         reward_code=reward_code
     )
-    await db.redemptions.insert_one(redemption.model_dump())
+    db.add(redemption)
     
     # Log transaction
     transaction = PointTransaction(
-        user_id=input.user_id,
-        user_name=user["name"],
+        user_id=user.id,
+        user_name=user.name,
         points=reward.points_required,
         reason=f"Redeemed: {reward.name}",
         transaction_type="spent"
     )
-    await db.transactions.insert_one(transaction.model_dump())
+    db.add(transaction)
+    
+    await db.commit()
     
     return {
         "success": True,
         "reward_code": reward_code,
         "reward_name": reward.name,
         "points_spent": reward.points_required,
-        "remaining_points": new_points
+        "remaining_points": user.current_points
     }
 
-@api_router.get("/redemptions", response_model=List[Redemption])
-async def get_redemptions():
-    redemptions = await db.redemptions.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+@api_router.get("/redemptions", response_model=List[RedemptionResponse])
+async def get_redemptions(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Redemption).order_by(Redemption.created_at.desc()).limit(500)
+    )
+    redemptions = result.scalars().all()
     return redemptions
 
-@api_router.get("/redemptions/user/{user_id}", response_model=List[Redemption])
-async def get_user_redemptions(user_id: str):
-    redemptions = await db.redemptions.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+@api_router.get("/redemptions/user/{user_id}", response_model=List[RedemptionResponse])
+async def get_user_redemptions(user_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Redemption)
+        .where(Redemption.user_id == user_id)
+        .order_by(Redemption.created_at.desc())
+        .limit(100)
+    )
+    redemptions = result.scalars().all()
     return redemptions
 
 @api_router.post("/redemptions/mark-claimed")
-async def mark_claimed(input: MarkClaimedRequest):
-    redemption = await db.redemptions.find_one({"id": input.redemption_id}, {"_id": 0})
+async def mark_claimed(input: MarkClaimedRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Redemption).where(Redemption.id == input.redemption_id))
+    redemption = result.scalar_one_or_none()
     if not redemption:
         raise HTTPException(status_code=404, detail="Redemption not found")
     
-    await db.redemptions.update_one(
-        {"id": input.redemption_id},
-        {"$set": {"claimed": True, "claimed_at": datetime.now(timezone.utc).isoformat()}}
-    )
+    redemption.claimed = True
+    redemption.claimed_at = datetime.now(timezone.utc)
+    await db.commit()
     
     return {"success": True, "message": "Redemption marked as claimed"}
 
 # ==================== LEADERBOARD ROUTES ====================
 
 @api_router.get("/leaderboard")
-async def get_leaderboard():
-    users = await db.users.find({}, {"_id": 0}).sort("lifetime_points", -1).to_list(50)
+async def get_leaderboard(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(User).order_by(User.lifetime_points.desc()).limit(50)
+    )
+    users = result.scalars().all()
     leaderboard = []
     for idx, user in enumerate(users):
         leaderboard.append({
             "rank": idx + 1,
-            "name": user["name"],
-            "lifetime_points": user["lifetime_points"],
-            "user_id": user["id"]
+            "name": user.name,
+            "lifetime_points": user.lifetime_points,
+            "user_id": user.id
         })
     return leaderboard
 
@@ -328,7 +384,3 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
