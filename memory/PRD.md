@@ -1,79 +1,67 @@
 # The Waffle Pop Co - Pop Points Loyalty App
 
 ## Original Problem Statement
-Build a Credit-Based Web App (QSR Loyalty App) for "The Waffle Pop Co" - a waffle and pancake outlet. Features include:
-- 5-tier Redeem Store with specific rewards
-- Leaderboard/Hall of Fame
-- Perfect 10 Game (baking theme)
-- Admin dashboard for points management
+Build a Credit-Based Web App (QSR Loyalty App) for "The Waffle Pop Co" - a waffle and pancake outlet.
+
+## Latest Updates (Jan 2025)
+- **Database**: Migrated from MongoDB to **Supabase PostgreSQL**
+- **Admin**: Added "Add User" tab with name and initial points input
+- **Redeem Store**: Disabled purchase buttons (display only for now)
+- **Game**: Changed from Perfect 10 to **Perfect 5** (5 second target)
+- **Game UI**: Fixed text visibility with light background
 
 ## User Personas
-1. **Customers**: Regular patrons who earn Pop Points through purchases and redeem for rewards
-2. **Admin/Staff**: Manages point allocation and redemption verification
+1. **Customers**: Regular patrons who earn Pop Points through purchases
+2. **Admin/Staff**: Manages user creation, point allocation, and redemption verification
 
 ## Core Requirements
 - Customer login with name only
 - Admin login with password (1607)
-- Admin adds points when customers purchase
+- Admin adds users and points
 - Game is for fun only (no points earned)
 - Brand: The Waffle Pop Co, Points: Pop Points
 
-## What's Been Implemented (Jan 2025)
+## What's Been Implemented
+
+### Database (Supabase PostgreSQL)
+- `users` table: id, name, current_points, lifetime_points, created_at
+- `redemptions` table: reward codes, claim status
+- `point_transactions` table: audit trail
 
 ### Backend (FastAPI)
 - User registration/login endpoints
 - Admin authentication
-- Points management (add points to users)
-- Rewards catalog with 5 tiers:
-  - Tier 1: 200pts → 10% Off Voucher
-  - Tier 2: 400pts → Free Triangle Waffle
-  - Tier 3: 500pts → Popsicle Waffle
-  - Tier 4: 600pts → 6pc Pancake Stack
-  - Tier 5: 800pts → Premium Choice (Waffle OR 10pc Pancake)
-- Redemption workflow with unique code generation
-- Redemption tracking and claim status
+- **Admin create user with initial points** (NEW)
+- Points management
+- Rewards catalog (5 tiers - display only)
 - Leaderboard ranked by lifetime points
 
 ### Frontend (React)
-- Customer Login page (name-based)
-- Customer Dashboard with points display
-- Redeem Store with food cards & conditional button states
-- Perfect 10 Game (baking theme - stop at 10s)
+- Customer Login page
+- Customer Dashboard
+- **Redeem Store (view only, no purchase buttons)**
+- **Perfect 5 Game (5 second target, visible text)**
 - Hall of Fame Leaderboard
-- Admin Login page (password protected)
 - Admin Dashboard with:
-  - Add Points to users
-  - Redemption Tracker with "Mark as Claimed"
+  - **Add User tab (name + points)**
+  - Add Points tab
+  - Redemption Tracker
   - All Members view
-- Bottom navigation for mobile UX
 
-### Design
-- Warm amber/orange color palette
-- Fredoka (headings) + Quicksand (body) fonts
-- Mobile-first responsive design
-- Food imagery from Unsplash
+### Reward Tiers (Display Only)
+1. Tier 1: 200pts → 10% Off Voucher
+2. Tier 2: 400pts → Free Triangle Waffle
+3. Tier 3: 500pts → Popsicle Waffle
+4. Tier 4: 600pts → 6pc Pancake Stack
+5. Tier 5: 800pts → Premium Choice
 
-## Prioritized Backlog
-
-### P0 (Critical) - COMPLETED
-- ✅ Customer registration/login
-- ✅ Admin points management
-- ✅ 5-tier rewards with redemption
-- ✅ Leaderboard
-
-### P1 (Important)
-- QR code scanning for 800pt rewards
-- Push notifications for points updates
-- Transaction history for customers
-
-### P2 (Nice to have)
-- Points expiry system
-- Referral bonus program
-- Birthday rewards
-- Multiple admin accounts
+## Supabase Configuration
+- Project URL: https://pgxnhpikhgaxvczastny.supabase.co
+- Connection: Transaction Pooler (port 6543)
+- Region: ap-south-1
 
 ## Next Tasks
-1. Add QR code display for high-value redemptions (800pts)
-2. Add points transaction history view for customers
-3. Implement push notifications
-4. Add admin ability to create custom promotions
+1. Enable redemption feature when ready
+2. Add points transaction history for customers
+3. Add QR code for high-value rewards
+4. Push notifications for points updates
