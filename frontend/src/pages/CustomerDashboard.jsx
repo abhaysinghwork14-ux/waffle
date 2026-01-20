@@ -183,8 +183,8 @@ export default function CustomerDashboard() {
         <Card className="border-0 bg-gradient-to-r from-rose-500 to-orange-500 text-white overflow-hidden relative">
           <CardContent className="p-6">
             <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full" />
-            <h3 className="font-heading text-xl font-bold mb-1">Perfect 10 Game</h3>
-            <p className="text-white/90 text-sm mb-3">Stop the oven at exactly 10 seconds!</p>
+            <h3 className="font-heading text-xl font-bold mb-1">Perfect 5 Game</h3>
+            <p className="text-white/90 text-sm mb-3">Stop the oven at exactly 5 seconds!</p>
             <Button
               data-testid="play-game-btn"
               onClick={() => navigate("/game")}
