@@ -219,6 +219,16 @@ class WafflePOPAPITester:
             200
         )
 
+    def test_admin_create_user_with_points(self, name, points):
+        """Test admin create user with initial points"""
+        return self.run_test(
+            "Admin Create User with Points",
+            "POST",
+            "admin/create-user",
+            200,
+            data={"name": name, "points": points}
+        )
+
 def main():
     print("🧪 Starting Waffle Pop Co API Tests...")
     print("=" * 50)
