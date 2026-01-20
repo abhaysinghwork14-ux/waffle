@@ -309,6 +309,12 @@ def main():
     # Test 17: Get transactions
     tester.test_get_transactions()
 
+    # Test 18: Admin create user with points (NEW FEATURE)
+    admin_user_name = f"AdminCreated_{datetime.now().strftime('%H%M%S')}"
+    success, admin_user_data = tester.test_admin_create_user_with_points(admin_user_name, 250)
+    if success and 'id' in admin_user_data:
+        print(f"   Admin created user ID: {admin_user_data['id']} with {admin_user_data['current_points']} points")
+
     # Print final results
     print("\n" + "=" * 50)
     print(f"📊 Test Results: {tester.tests_passed}/{tester.tests_run} passed")
