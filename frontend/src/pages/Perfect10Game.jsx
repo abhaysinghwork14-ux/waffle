@@ -88,7 +88,6 @@ export default function Perfect10Game() {
       if (elapsed < 10) {
         animationFrameRef.current = requestAnimationFrame(updateTimer);
       } else {
-        // Auto stop at 10 seconds
         handleStop();
       }
     }
@@ -100,57 +99,6 @@ export default function Perfect10Game() {
     setResult(null);
     startTimeRef.current = performance.now();
     animationFrameRef.current = requestAnimationFrame(updateTimer);
-  };
-
-  const handleStop = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-    setGameState("stopped");
-
-    const finalTime = startTimeRef.current
-      ? (performance.now() - startTimeRef.current) / 1000
-      : time;
-    setTime(finalTime);
-
-    // Calculate result based on TARGET_TIME (5 seconds)
-    const diff = Math.abs(finalTime - TARGET_TIME);
-    let resultData = { time: finalTime, diff };
-
-    if (diff <= 0.01) {
-      resultData.rating = "PERFECT BAKE!";
-      resultData.emoji = "🎉";
-      resultData.color = "text-green-600";
-      resultData.bgColor = "bg-green-100";
-    } else if (diff <= 0.1) {
-      resultData.rating = "Almost Perfect!";
-      resultData.emoji = "🔥";
-      resultData.color = "text-amber-600";
-      resultData.bgColor = "bg-amber-100";
-    } else if (diff <= 0.3) {
-      resultData.rating = "Great Timing!";
-      resultData.emoji = "👍";
-      resultData.color = "text-orange-600";
-      resultData.bgColor = "bg-orange-100";
-    } else if (diff <= 0.5) {
-      resultData.rating = "Good Try!";
-      resultData.emoji = "😊";
-      resultData.color = "text-blue-600";
-      resultData.bgColor = "bg-blue-100";
-    } else {
-      resultData.rating = finalTime < TARGET_TIME ? "Too Early!" : "Overbaked!";
-      resultData.emoji = finalTime < TARGET_TIME ? "⏰" : "🔥";
-      resultData.color = "text-rose-600";
-      resultData.bgColor = "bg-rose-100";
-    }
-
-    setResult(resultData);
-
-    // Update best time
-    if (!bestTime || diff < Math.abs(bestTime - TARGET_TIME)) {
-      setBestTime(finalTime);
-      localStorage.setItem("perfect5_best", finalTime.toString());
-    }
   };
 
   const handleReset = () => {
@@ -213,8 +161,6 @@ export default function Perfect10Game() {
                     ? time >= 4.5 && time <= 5.5
                       ? "text-green-400"
                       : "text-white"
-                    : result
-                    ? "text-white"
                     : "text-white"
                 }`}
               >
