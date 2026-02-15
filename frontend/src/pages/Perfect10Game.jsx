@@ -27,6 +27,60 @@ export default function Perfect10Game() {
     if (stored) setBestTime(parseFloat(stored));
   }, [navigate]);
 
+  const handleStop = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    setGameState("stopped");
+
+    const finalTime = startTimeRef.current
+      ? (performance.now() - startTimeRef.current) / 1000
+      : 0;
+    setTime(finalTime);
+
+    // Calculate result based on TARGET_TIME (5 seconds)
+    const diff = Math.abs(finalTime - TARGET_TIME);
+    let resultData = { time: finalTime, diff };
+
+    if (diff <= 0.01) {
+      resultData.rating = "PERFECT BAKE!";
+      resultData.emoji = "🎉";
+      resultData.color = "text-green-600";
+      resultData.bgColor = "bg-green-100";
+    } else if (diff <= 0.1) {
+      resultData.rating = "Almost Perfect!";
+      resultData.emoji = "🔥";
+      resultData.color = "text-amber-600";
+      resultData.bgColor = "bg-amber-100";
+    } else if (diff <= 0.3) {
+      resultData.rating = "Great Timing!";
+      resultData.emoji = "👍";
+      resultData.color = "text-orange-600";
+      resultData.bgColor = "bg-orange-100";
+    } else if (diff <= 0.5) {
+      resultData.rating = "Good Try!";
+      resultData.emoji = "😊";
+      resultData.color = "text-blue-600";
+      resultData.bgColor = "bg-blue-100";
+    } else {
+      resultData.rating = finalTime < TARGET_TIME ? "Too Early!" : "Overbaked!";
+      resultData.emoji = finalTime < TARGET_TIME ? "⏰" : "🔥";
+      resultData.color = "text-rose-600";
+      resultData.bgColor = "bg-rose-100";
+    }
+
+    setResult(resultData);
+
+    // Update best time
+    setBestTime((prevBest) => {
+      if (!prevBest || diff < Math.abs(prevBest - TARGET_TIME)) {
+        localStorage.setItem("perfect5_best", finalTime.toString());
+        return finalTime;
+      }
+      return prevBest;
+    });
+  }, []);
+
   const updateTimer = useCallback(() => {
     if (startTimeRef.current) {
       const elapsed = (performance.now() - startTimeRef.current) / 1000;
@@ -38,7 +92,7 @@ export default function Perfect10Game() {
         handleStop();
       }
     }
-  }, []);
+  }, [handleStop]);
 
   const handleStart = () => {
     setGameState("running");

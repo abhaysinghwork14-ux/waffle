@@ -21,28 +21,29 @@ export default function RedeemStore() {
       return;
     }
     const userData = JSON.parse(storedUser);
-    fetchUserData(userData.id);
-    fetchRewards();
+    
+    const loadUserData = async (userId) => {
+      try {
+        const response = await axios.get(`${API}/users/${userId}`);
+        setUser(response.data);
+        localStorage.setItem("user", JSON.stringify(response.data));
+      } catch (error) {
+        navigate("/");
+      }
+    };
+    
+    const loadRewards = async () => {
+      try {
+        const response = await axios.get(`${API}/rewards`);
+        setRewards(response.data);
+      } catch (error) {
+        toast.error("Failed to load rewards");
+      }
+    };
+    
+    loadUserData(userData.id);
+    loadRewards();
   }, [navigate]);
-
-  const fetchUserData = async (userId) => {
-    try {
-      const response = await axios.get(`${API}/users/${userId}`);
-      setUser(response.data);
-      localStorage.setItem("user", JSON.stringify(response.data));
-    } catch (error) {
-      navigate("/");
-    }
-  };
-
-  const fetchRewards = async () => {
-    try {
-      const response = await axios.get(`${API}/rewards`);
-      setRewards(response.data);
-    } catch (error) {
-      toast.error("Failed to load rewards");
-    }
-  };
 
   const tierColors = {
     1: "from-amber-100 to-amber-50",
