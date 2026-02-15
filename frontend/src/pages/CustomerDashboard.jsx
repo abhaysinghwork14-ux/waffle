@@ -49,28 +49,6 @@ export default function CustomerDashboard() {
     loadRedemptions(userData.id);
   }, [navigate]);
 
-  const fetchUserData = async (userId) => {
-    try {
-      const response = await axios.get(`${API}/users/${userId}`);
-      setUser(response.data);
-      localStorage.setItem("user", JSON.stringify(response.data));
-    } catch (error) {
-      toast.error("Failed to load user data");
-      navigate("/");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchRedemptions = async (userId) => {
-    try {
-      const response = await axios.get(`${API}/redemptions/user/${userId}`);
-      setRedemptions(response.data.slice(0, 3));
-    } catch (error) {
-      console.error("Failed to load redemptions");
-    }
-  };
-
   const handleLogout = () => {
     localStorage.removeItem("user");
     toast.success("See you soon!");
