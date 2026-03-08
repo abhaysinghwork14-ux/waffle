@@ -30,6 +30,10 @@ import {
   Clock,
   Star,
   UserPlus,
+  History,
+  X,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -37,6 +41,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [redemptions, setRedemptions] = useState([]);
+  const [allTransactions, setAllTransactions] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [pointsToAdd, setPointsToAdd] = useState("");
   const [reason, setReason] = useState("Purchase");
@@ -44,6 +49,12 @@ export default function AdminDashboard() {
   const [newUserPoints, setNewUserPoints] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  // History modal state
+  const [historyUser, setHistoryUser] = useState(null); // { id, name }
+  const [userTransactions, setUserTransactions] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -66,6 +77,25 @@ export default function AdminDashboard() {
     } catch (error) {
       toast.error("Failed to load data");
     }
+  };
+
+  const openHistory = async (user) => {
+    setHistoryUser(user);
+    setIsHistoryLoading(true);
+    try {
+      const res = await axios.get(`${API}/admin/transactions`);
+      const filtered = res.data.filter((t) => t.user_id === user.id);
+      setUserTransactions(filtered);
+    } catch (error) {
+      toast.error("Failed to load transaction history");
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  const closeHistory = () => {
+    setHistoryUser(null);
+    setUserTransactions([]);
   };
 
   const handleCreateUser = async (e) => {
@@ -262,7 +292,6 @@ export default function AdminDashboard() {
                       className="w-full"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Initial Pop Points (optional)
@@ -277,7 +306,6 @@ export default function AdminDashboard() {
                       className="w-full"
                     />
                   </div>
-
                   <Button
                     data-testid="create-user-btn"
                     type="submit"
@@ -305,10 +333,7 @@ export default function AdminDashboard() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Select Member
                     </label>
-                    <Select
-                      value={selectedUserId}
-                      onValueChange={setSelectedUserId}
-                    >
+                    <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                       <SelectTrigger data-testid="select-user-dropdown" className="w-full">
                         <SelectValue placeholder="Choose a member" />
                       </SelectTrigger>
@@ -321,7 +346,6 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Points to Add
@@ -336,7 +360,6 @@ export default function AdminDashboard() {
                       className="w-full"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Reason
@@ -350,7 +373,6 @@ export default function AdminDashboard() {
                       className="w-full"
                     />
                   </div>
-
                   <Button
                     data-testid="add-points-btn"
                     type="submit"
@@ -443,7 +465,7 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Users Tab */}
+          {/* All Members Tab */}
           <TabsContent value="users">
             <Card>
               <CardHeader>
@@ -460,6 +482,7 @@ export default function AdminDashboard() {
                         <TableHead>Current Points</TableHead>
                         <TableHead>Lifetime Points</TableHead>
                         <TableHead>Joined</TableHead>
+                        <TableHead>History</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -479,11 +502,22 @@ export default function AdminDashboard() {
                             <TableCell className="text-sm text-gray-500">
                               {formatDate(user.created_at)}
                             </TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openHistory(user)}
+                                className="text-amber-700 border-amber-300 hover:bg-amber-50 text-xs"
+                              >
+                                <History className="w-3 h-3 mr-1" />
+                                History
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={5} className="text-center py-8 text-gray-500">
                             No members yet
                           </TableCell>
                         </TableRow>
@@ -496,6 +530,119 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* ── History Modal ── */}
+      {historyUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={closeHistory}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+                  <History className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-gray-800 text-lg leading-tight">
+                    {historyUser.name}
+                  </h2>
+                  <p className="text-xs text-gray-400">Point Transaction History</p>
+                </div>
+              </div>
+              <button
+                onClick={closeHistory}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {isHistoryLoading ? (
+                <div className="flex items-center justify-center py-12 text-gray-400">
+                  <Clock className="w-5 h-5 mr-2 animate-spin" />
+                  Loading history...
+                </div>
+              ) : userTransactions.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p>No transactions found for this member.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {userTransactions.map((t) => {
+                    const isEarned = t.transaction_type === "earned";
+                    return (
+                      <div
+                        key={t.id}
+                        className={`flex items-center gap-4 p-3 rounded-xl border ${
+                          isEarned
+                            ? "bg-green-50 border-green-100"
+                            : "bg-rose-50 border-rose-100"
+                        }`}
+                      >
+                        {/* Icon */}
+                        <div
+                          className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            isEarned ? "bg-green-100" : "bg-rose-100"
+                          }`}
+                        >
+                          {isEarned ? (
+                            <TrendingUp className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-rose-600" />
+                          )}
+                        </div>
+
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-800 text-sm truncate">
+                            {t.reason}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {formatDate(t.created_at)}
+                          </p>
+                        </div>
+
+                        {/* Points */}
+                        <div
+                          className={`font-bold text-base flex-shrink-0 ${
+                            isEarned ? "text-green-600" : "text-rose-600"
+                          }`}
+                        >
+                          {isEarned ? "+" : "-"}
+                          {t.points} pts
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 border-t border-gray-100 flex justify-between items-center">
+              <p className="text-xs text-gray-400">
+                {userTransactions.length} transaction{userTransactions.length !== 1 ? "s" : ""} total
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={closeHistory}
+                className="text-gray-500"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
