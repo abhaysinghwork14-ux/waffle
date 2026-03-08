@@ -11,7 +11,7 @@ import string
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from database import get_db, engine, Base
 from models import User, Redemption, PointTransaction
@@ -19,11 +19,10 @@ from models import User, Redemption, PointTransaction
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# Create the main app
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+POINTS_EXPIRY_DAYS = 90  # 3 months
 
 # ==================== PYDANTIC MODELS ====================
 
@@ -34,6 +33,26 @@ class UserResponse(BaseModel):
     current_points: int
     lifetime_points: int
     created_at: datetime
+    points_expiry: Optional[datetime] = None
+    points_expired: Optional[bool] = False
+
+    @classmethod
+    def from_user(cls, user: User):
+        now = datetime.now(timezone.utc)
+        expired = (
+            user.points_expiry is not None
+            and user.points_expiry < now
+            and user.current_points > 0
+        )
+        return cls(
+            id=user.id,
+            name=user.name,
+            current_points=0 if expired else user.current_points,
+            lifetime_points=user.lifetime_points,
+            created_at=user.created_at,
+            points_expiry=user.points_expiry,
+            points_expired=expired,
+        )
 
 class UserCreate(BaseModel):
     name: str
@@ -92,12 +111,6 @@ class PointTransactionResponse(BaseModel):
     created_at: datetime
 
 # ==================== REWARDS CATALOG ====================
-# ==================== PING (keeps Render awake) ====================
-
-@app.get("/ping")
-async def ping():
-    return {"status": "alive"}
-
 
 REWARDS_CATALOG = [
     RewardItem(
@@ -149,29 +162,36 @@ def generate_reward_code(reward_name: str) -> str:
     suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     return f"{prefix}-{suffix}"
 
+def get_new_expiry() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(days=POINTS_EXPIRY_DAYS)
+
+# ==================== PING ====================
+
+@app.get("/ping")
+async def ping():
+    return {"status": "alive"}
+
 # ==================== USER ROUTES ====================
 
 @api_router.get("/")
 async def root():
     return {"message": "The Waffle Pop Co API"}
 
-@api_router.post("/users/register", response_model=UserResponse)
+@api_router.post("/users/register")
 async def register_user(input: UserCreate, db: AsyncSession = Depends(get_db)):
-    # Check if user already exists (case insensitive)
     result = await db.execute(
         select(User).where(func.lower(User.name) == input.name.lower())
     )
     existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="User with this name already exists")
-    
     user = User(name=input.name)
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    return user
+    return UserResponse.from_user(user)
 
-@api_router.post("/users/login", response_model=UserResponse)
+@api_router.post("/users/login")
 async def login_user(input: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(User).where(func.lower(User.name) == input.name.lower())
@@ -179,21 +199,21 @@ async def login_user(input: UserLogin, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please register first.")
-    return user
+    return UserResponse.from_user(user)
 
-@api_router.get("/users/{user_id}", response_model=UserResponse)
+@api_router.get("/users/{user_id}")
 async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+    return UserResponse.from_user(user)
 
-@api_router.get("/users", response_model=List[UserResponse])
+@api_router.get("/users")
 async def get_all_users(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).order_by(User.name))
     users = result.scalars().all()
-    return users
+    return [UserResponse.from_user(u) for u in users]
 
 # ==================== ADMIN ROUTES ====================
 
@@ -203,26 +223,25 @@ async def admin_login(input: AdminLogin):
         raise HTTPException(status_code=401, detail="Invalid admin password")
     return {"success": True, "message": "Admin login successful"}
 
-@api_router.post("/admin/create-user", response_model=UserResponse)
+@api_router.post("/admin/create-user")
 async def create_user_with_points(input: UserCreateWithPoints, db: AsyncSession = Depends(get_db)):
-    # Check if user already exists
     result = await db.execute(
         select(User).where(func.lower(User.name) == input.name.lower())
     )
     existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="User with this name already exists")
-    
+
     user = User(
         name=input.name,
         current_points=input.points,
-        lifetime_points=input.points
+        lifetime_points=input.points,
+        points_expiry=get_new_expiry() if input.points > 0 else None,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    
-    # Log transaction if points > 0
+
     if input.points > 0:
         transaction = PointTransaction(
             user_id=user.id,
@@ -233,8 +252,8 @@ async def create_user_with_points(input: UserCreateWithPoints, db: AsyncSession 
         )
         db.add(transaction)
         await db.commit()
-    
-    return user
+
+    return UserResponse.from_user(user)
 
 @api_router.post("/admin/add-points")
 async def add_points(input: AddPointsRequest, db: AsyncSession = Depends(get_db)):
@@ -242,11 +261,17 @@ async def add_points(input: AddPointsRequest, db: AsyncSession = Depends(get_db)
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    now = datetime.now(timezone.utc)
+
+    # If points were previously expired, reset current_points to 0 first
+    if user.points_expiry and user.points_expiry < now:
+        user.current_points = 0
+
     user.current_points += input.points
     user.lifetime_points += input.points
-    
-    # Log transaction
+    user.points_expiry = get_new_expiry()  # Reset expiry on every new addition
+
     transaction = PointTransaction(
         user_id=user.id,
         user_name=user.name,
@@ -257,8 +282,8 @@ async def add_points(input: AddPointsRequest, db: AsyncSession = Depends(get_db)
     db.add(transaction)
     await db.commit()
     await db.refresh(user)
-    
-    return {"success": True, "user": UserResponse.model_validate(user)}
+
+    return {"success": True, "user": UserResponse.from_user(user)}
 
 @api_router.get("/admin/transactions", response_model=List[PointTransactionResponse])
 async def get_transactions(db: AsyncSession = Depends(get_db)):
@@ -280,18 +305,21 @@ async def redeem_reward(input: RedeemRequest, db: AsyncSession = Depends(get_db)
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    # Block redemption if points are expired
+    now = datetime.now(timezone.utc)
+    if user.points_expiry and user.points_expiry < now:
+        raise HTTPException(status_code=400, detail="Your points have expired. Please visit us to earn new points!")
+
     reward = next((r for r in REWARDS_CATALOG if r.id == input.reward_id), None)
     if not reward:
         raise HTTPException(status_code=404, detail="Reward not found")
-    
+
     if user.current_points < reward.points_required:
         raise HTTPException(status_code=400, detail="Insufficient points")
-    
-    # Deduct points
+
     user.current_points -= reward.points_required
-    
-    # Create redemption record
+
     reward_code = generate_reward_code(reward.name)
     redemption = Redemption(
         user_id=user.id,
@@ -302,8 +330,7 @@ async def redeem_reward(input: RedeemRequest, db: AsyncSession = Depends(get_db)
         reward_code=reward_code
     )
     db.add(redemption)
-    
-    # Log transaction
+
     transaction = PointTransaction(
         user_id=user.id,
         user_name=user.name,
@@ -312,9 +339,9 @@ async def redeem_reward(input: RedeemRequest, db: AsyncSession = Depends(get_db)
         transaction_type="spent"
     )
     db.add(transaction)
-    
+
     await db.commit()
-    
+
     return {
         "success": True,
         "reward_code": reward_code,
@@ -348,14 +375,12 @@ async def mark_claimed(input: MarkClaimedRequest, db: AsyncSession = Depends(get
     redemption = result.scalar_one_or_none()
     if not redemption:
         raise HTTPException(status_code=404, detail="Redemption not found")
-    
     redemption.claimed = True
     redemption.claimed_at = datetime.now(timezone.utc)
     await db.commit()
-    
     return {"success": True, "message": "Redemption marked as claimed"}
 
-# ==================== LEADERBOARD ROUTES ====================
+# ==================== LEADERBOARD ====================
 
 @api_router.get("/leaderboard")
 async def get_leaderboard(db: AsyncSession = Depends(get_db)):
@@ -363,17 +388,19 @@ async def get_leaderboard(db: AsyncSession = Depends(get_db)):
         select(User).order_by(User.lifetime_points.desc()).limit(50)
     )
     users = result.scalars().all()
+    now = datetime.now(timezone.utc)
     leaderboard = []
     for idx, user in enumerate(users):
+        expired = user.points_expiry and user.points_expiry < now
         leaderboard.append({
             "rank": idx + 1,
             "name": user.name,
             "lifetime_points": user.lifetime_points,
+            "current_points": 0 if expired else user.current_points,
             "user_id": user.id
         })
     return leaderboard
 
-# Include the router in the main app
 app.include_router(api_router)
 
 app.add_middleware(
@@ -384,7 +411,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
