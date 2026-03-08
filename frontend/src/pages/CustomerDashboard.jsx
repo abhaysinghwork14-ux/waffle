@@ -5,9 +5,24 @@ import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import BottomNav from "@/components/BottomNav";
-import { Gift, Trophy, Gamepad2, History } from "lucide-react";
+import { Gift, Trophy, Gamepad2, History, AlertTriangle, Clock } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+function getExpiryInfo(points_expiry, points_expired, current_points) {
+  if (!points_expiry || current_points === 0) return null;
+  const expiry = new Date(points_expiry);
+  const now = new Date();
+  const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+
+  if (points_expired) {
+    return { type: "expired", label: "Your points have expired", color: "red", daysLeft: 0 };
+  }
+  if (daysLeft <= 14) {
+    return { type: "warning", label: `Expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`, color: "orange", daysLeft };
+  }
+  return { type: "ok", label: `Valid until ${expiry.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`, color: "green", daysLeft };
+}
 
 export default function CustomerDashboard() {
   const [user, setUser] = useState(null);
@@ -22,7 +37,7 @@ export default function CustomerDashboard() {
       return;
     }
     const userData = JSON.parse(storedUser);
-    
+
     const loadUserData = async (userId) => {
       try {
         const response = await axios.get(`${API}/users/${userId}`);
@@ -35,7 +50,7 @@ export default function CustomerDashboard() {
         setIsLoading(false);
       }
     };
-    
+
     const loadRedemptions = async (userId) => {
       try {
         const response = await axios.get(`${API}/redemptions/user/${userId}`);
@@ -44,7 +59,7 @@ export default function CustomerDashboard() {
         console.error("Failed to load redemptions");
       }
     };
-    
+
     loadUserData(userData.id);
     loadRedemptions(userData.id);
   }, [navigate]);
@@ -63,13 +78,14 @@ export default function CustomerDashboard() {
     );
   }
 
+  const expiryInfo = getExpiryInfo(user?.points_expiry, user?.points_expired, user?.current_points);
+
   return (
     <div className="app-container min-h-screen pb-safe">
       {/* Header */}
       <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-6 pb-20 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
-        
         <div className="relative z-10">
           <div className="flex justify-between items-start">
             <div>
@@ -96,13 +112,58 @@ export default function CustomerDashboard() {
           <CardContent className="p-6">
             <div className="text-center">
               <p className="text-amber-600 font-medium mb-1">Your Pop Points</p>
-              <h2 data-testid="current-points" className="font-heading text-5xl font-bold text-amber-800">
-                {user?.current_points || 0}
-              </h2>
+
+              {user?.points_expired ? (
+                <>
+                  <h2 className="font-heading text-5xl font-bold text-gray-300 line-through">
+                    {user?.current_points || 0}
+                  </h2>
+                  <p className="text-red-500 text-sm font-semibold mt-1">Points Expired</p>
+                </>
+              ) : (
+                <h2 data-testid="current-points" className="font-heading text-5xl font-bold text-amber-800">
+                  {user?.current_points || 0}
+                </h2>
+              )}
+
               <p className="text-amber-500 text-sm mt-2">
                 Lifetime: {user?.lifetime_points || 0} points
               </p>
             </div>
+
+            {/* Expiry Banner */}
+            {expiryInfo && (
+              <div className={`mt-4 rounded-xl px-4 py-3 flex items-center gap-3 ${
+                expiryInfo.type === "expired"
+                  ? "bg-red-50 border border-red-200"
+                  : expiryInfo.type === "warning"
+                  ? "bg-orange-50 border border-orange-200"
+                  : "bg-green-50 border border-green-200"
+              }`}>
+                {expiryInfo.type === "expired" ? (
+                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                ) : expiryInfo.type === "warning" ? (
+                  <AlertTriangle className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                ) : (
+                  <Clock className="w-4 h-4 text-green-600 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <p className={`text-sm font-semibold ${
+                    expiryInfo.type === "expired" ? "text-red-600"
+                    : expiryInfo.type === "warning" ? "text-orange-600"
+                    : "text-green-700"
+                  }`}>
+                    {expiryInfo.label}
+                  </p>
+                  {expiryInfo.type === "expired" && (
+                    <p className="text-xs text-red-400 mt-0.5">Visit us to earn fresh points!</p>
+                  )}
+                  {expiryInfo.type === "warning" && (
+                    <p className="text-xs text-orange-400 mt-0.5">Redeem before they're gone!</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-3 mt-6">
               <Button
@@ -153,8 +214,8 @@ export default function CustomerDashboard() {
                     <p className="text-sm text-amber-600">Code: {r.reward_code}</p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    r.claimed 
-                      ? "bg-green-100 text-green-700" 
+                    r.claimed
+                      ? "bg-green-100 text-green-700"
                       : "bg-amber-100 text-amber-700"
                   }`}>
                     {r.claimed ? "Claimed" : "Pending"}
