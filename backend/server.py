@@ -92,6 +92,12 @@ class PointTransactionResponse(BaseModel):
     created_at: datetime
 
 # ==================== REWARDS CATALOG ====================
+# ==================== PING (keeps Render awake) ====================
+
+@app.get("/ping")
+async def ping():
+    return {"status": "alive"}
+
 
 REWARDS_CATALOG = [
     RewardItem(
