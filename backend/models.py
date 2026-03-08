@@ -15,7 +15,8 @@ class User(Base):
     current_points = Column(Integer, default=0)
     lifetime_points = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    
+    points_expiry = Column(DateTime(timezone=True), nullable=True)  # 90 days from last points added
+
     redemptions = relationship('Redemption', back_populates='user', cascade='all, delete-orphan')
     transactions = relationship('PointTransaction', back_populates='user', cascade='all, delete-orphan')
 
