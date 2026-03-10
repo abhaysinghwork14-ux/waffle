@@ -257,16 +257,19 @@ export default function CustomerDashboard() {
           </CardContent>
         </Card>
       </div>
-
-      <BottomNav active="home" />
-    </div>
-    <div style={{ borderTop: "1px solid #e5e7eb", marginTop: "40px", padding: "20px 16px", textAlign: "center" }}>
+      
+      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: "40px", padding: "20px 16px", textAlign: "center" }}>
   <p style={{ fontSize: "12px", color: "#6b7280", lineHeight: "2", maxWidth: "700px", margin: "0 auto" }}>
     <strong>Terms & Conditions:</strong><br />
     1. The management decision is the last and final decision on all matters.<br />
     2. All points added on different days have different expiry dates.<br />
     3. Points are valid for <strong>90 days</strong> from the date they are added and will expire thereafter.
   </p>
+        
 </div>
+
+      <BottomNav active="home" />
+    </div>
+    
   );
 }
