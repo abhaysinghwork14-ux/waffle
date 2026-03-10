@@ -64,9 +64,13 @@ export default function CustomerLogin() {
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-32 h-32 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg animate-float">
-            <span className="text-white text-4xl font-heading font-bold">W</span>
-          </div>
+          <div className="w-32 h-32 mx-auto mb-4 rounded-full flex items-center justify-center shadow-lg animate-float overflow-hidden" style={{ background: "#F5A623" }}>
+  <img
+    src="/final_logo.png"
+    alt="The Waffle Pop Co."
+    className="w-full h-full object-contain p-2"
+  />
+</div>
           <h1 className="font-heading text-3xl font-bold text-amber-800">
             The Waffle Pop Co
           </h1>
