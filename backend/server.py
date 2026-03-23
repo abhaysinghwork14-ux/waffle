@@ -285,13 +285,30 @@ async def add_points(input: AddPointsRequest, db: AsyncSession = Depends(get_db)
 
     return {"success": True, "user": UserResponse.from_user(user)}
 
-@api_router.get("/admin/transactions", response_model=List[PointTransactionResponse])
-async def get_transactions(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(PointTransaction).order_by(PointTransaction.created_at.desc()).limit(500)
+# ==================== NEW: SUBTRACT POINTS ====================
+
+@api_router.post("/admin/subtract-points")
+async def subtract_points(input: AddPointsRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == input.user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Allow points to go negative — no floor/cap
+    user.current_points = user.current_points - input.points
+
+    transaction = PointTransaction(
+        user_id=user.id,
+        user_name=user.name,
+        points=input.points,
+        reason=input.reason,
+        transaction_type="spent"
     )
-    transactions = result.scalars().all()
-    return transactions
+    db.add(transaction)
+    await db.commit()
+    await db.refresh(user)
+
+    return {"success": True, "user": UserResponse.from_user(user)}
 
 # ==================== REWARDS ROUTES ====================
 
