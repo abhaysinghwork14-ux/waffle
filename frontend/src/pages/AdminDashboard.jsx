@@ -53,6 +53,8 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [redemptions, setRedemptions] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [pointsAmount, setPointsAmount] = useState("");
   const [pointsMode, setPointsMode] = useState("add"); // "add" or "subtract"
   const [reason, setReason] = useState("Purchase");
@@ -148,7 +150,7 @@ export default function AdminDashboard() {
         });
         toast.success(`Subtracted ${points} Pop Points!`);
       }
-      setPointsAmount(""); setSelectedUserId(""); setReason("Purchase");
+    setPointsAmount(""); setSelectedUserId(""); setSearchQuery(""); setReason("Purchase");
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to update points");
@@ -324,22 +326,65 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* SELECT MEMBER */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Member</label>
-                    <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                      <SelectTrigger data-testid="select-user-dropdown" className="w-full">
-                        <SelectValue placeholder="Choose a member" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {users.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name} ({user.current_points} pts)
-                            {user.points_expired && " ⚠️ expired"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {/* SEARCH MEMBER */}
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Search Member</label>
+                    <Input
+                      data-testid="search-user-input"
+                      type="text"
+                      placeholder="Type a name to search..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setSelectedUserId("");
+                        setShowSuggestions(true);
+                      }}
+                      onFocus={() => setShowSuggestions(true)}
+                      className="w-full"
+                      autoComplete="off"
+                    />
+                    {/* Search icon indicator */}
+                    {selectedUserId && (
+                      <span className="absolute right-3 top-9 text-green-500 text-sm font-bold">✓</span>
+                    )}
+                    {/* Suggestions dropdown */}
+                    {showSuggestions && searchQuery.trim().length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                        {users
+                          .filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                          .length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-gray-400">No member found</div>
+                        ) : (
+                          users
+                            .filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                            .map((u) => (
+                              <div
+                                key={u.id}
+                                onClick={() => {
+                                  setSelectedUserId(u.id);
+                                  setSearchQuery(u.name);
+                                  setShowSuggestions(false);
+                                }}
+                                className="flex items-center justify-between px-4 py-3 hover:bg-amber-50 cursor-pointer border-b border-gray-50 last:border-0"
+                              >
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-800">{u.name}</p>
+                                  {u.points_expired && (
+                                    <p className="text-xs text-red-400">⚠️ Points expired</p>
+                                  )}
+                                </div>
+                                <span className={`text-sm font-bold px-2 py-1 rounded-full ${
+                                  u.points_expired
+                                    ? "bg-red-100 text-red-500"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}>
+                                  {u.current_points} pts
+                                </span>
+                              </div>
+                            ))
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* CURRENT BALANCE INDICATOR */}
