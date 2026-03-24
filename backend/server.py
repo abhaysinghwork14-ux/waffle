@@ -285,6 +285,16 @@ async def add_points(input: AddPointsRequest, db: AsyncSession = Depends(get_db)
 
     return {"success": True, "user": UserResponse.from_user(user)}
 
+# ==================== TRANSACTIONS ====================
+
+@api_router.get("/admin/transactions", response_model=List[PointTransactionResponse])
+async def get_transactions(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(PointTransaction).order_by(PointTransaction.created_at.desc()).limit(500)
+    )
+    transactions = result.scalars().all()
+    return transactions
+
 # ==================== NEW: SUBTRACT POINTS ====================
 
 @api_router.post("/admin/subtract-points")
