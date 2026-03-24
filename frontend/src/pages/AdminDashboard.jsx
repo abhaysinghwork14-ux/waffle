@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import {
   LogOut, Users, Gift, PlusCircle, CheckCircle, Clock,
-  Star, UserPlus, History, X, TrendingUp, TrendingDown, AlertTriangle,
+  Star, UserPlus, History, X, TrendingUp, TrendingDown, AlertTriangle, MinusCircle,
 } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -53,7 +53,8 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [redemptions, setRedemptions] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [pointsToAdd, setPointsToAdd] = useState("");
+  const [pointsAmount, setPointsAmount] = useState("");
+  const [pointsMode, setPointsMode] = useState("add"); // "add" or "subtract"
   const [reason, setReason] = useState("Purchase");
   const [newUserName, setNewUserName] = useState("");
   const [newUserPoints, setNewUserPoints] = useState("");
@@ -117,19 +118,40 @@ export default function AdminDashboard() {
     } finally { setIsCreatingUser(false); }
   };
 
-  const handleAddPoints = async (e) => {
+  const handleUpdatePoints = async (e) => {
     e.preventDefault();
-    if (!selectedUserId || !pointsToAdd) { toast.error("Please select a user and enter points"); return; }
-    const points = parseInt(pointsToAdd);
+    if (!selectedUserId || !pointsAmount) { toast.error("Please select a user and enter points"); return; }
+    const points = parseInt(pointsAmount);
     if (isNaN(points) || points <= 0) { toast.error("Enter a valid positive number"); return; }
+
+    // Find selected user to check balance for subtract
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    if (pointsMode === "subtract" && selectedUser && points > selectedUser.current_points) {
+      toast.error(`Cannot subtract ${points} pts — user only has ${selectedUser.current_points} pts`);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await axios.post(`${API}/admin/add-points`, { user_id: selectedUserId, points, reason });
-      toast.success(`Added ${points} Pop Points!`);
-      setPointsToAdd(""); setSelectedUserId("");
+      if (pointsMode === "add") {
+        await axios.post(`${API}/admin/add-points`, {
+          user_id: selectedUserId,
+          points,
+          reason,
+        });
+        toast.success(`Added ${points} Pop Points!`);
+      } else {
+        await axios.post(`${API}/admin/subtract-points`, {
+          user_id: selectedUserId,
+          points,
+          reason,
+        });
+        toast.success(`Subtracted ${points} Pop Points!`);
+      }
+      setPointsAmount(""); setSelectedUserId(""); setReason("Purchase");
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to add points");
+      toast.error(error.response?.data?.detail || "Failed to update points");
     } finally { setIsLoading(false); }
   };
 
@@ -148,8 +170,8 @@ export default function AdminDashboard() {
   };
 
   const formatDate = (isoString) => new Date(isoString).toLocaleString();
-
   const expiredCount = users.filter((u) => u.points_expired).length;
+  const selectedUser = users.find(u => u.id === selectedUserId);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -226,8 +248,8 @@ export default function AdminDashboard() {
             <TabsTrigger value="add-user" className="data-[state=active]:bg-amber-100">
               <UserPlus className="w-4 h-4 mr-2" /> Add User
             </TabsTrigger>
-            <TabsTrigger value="add-points" className="data-[state=active]:bg-amber-100">
-              <PlusCircle className="w-4 h-4 mr-2" /> Add Points
+            <TabsTrigger value="manage-points" className="data-[state=active]:bg-amber-100">
+              <PlusCircle className="w-4 h-4 mr-2" /> Manage Points
             </TabsTrigger>
             <TabsTrigger value="redemptions" className="data-[state=active]:bg-amber-100">
               <Gift className="w-4 h-4 mr-2" /> Redemptions
@@ -262,12 +284,47 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Add Points */}
-          <TabsContent value="add-points">
+          {/* Manage Points — Add OR Subtract */}
+          <TabsContent value="manage-points">
             <Card>
-              <CardHeader><CardTitle className="font-heading text-amber-800">Add Pop Points</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="font-heading text-amber-800">Manage Pop Points</CardTitle>
+              </CardHeader>
               <CardContent>
-                <form onSubmit={handleAddPoints} className="space-y-4 max-w-md">
+                <form onSubmit={handleUpdatePoints} className="space-y-4 max-w-md">
+
+                  {/* ADD / SUBTRACT TOGGLE */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Action</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setPointsMode("add"); setReason("Purchase"); }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 font-semibold text-sm transition-all ${
+                          pointsMode === "add"
+                            ? "bg-green-50 border-green-500 text-green-700"
+                            : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                        }`}
+                      >
+                        <TrendingUp className="w-4 h-4" />
+                        Add Points
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setPointsMode("subtract"); setReason("Correction"); }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 font-semibold text-sm transition-all ${
+                          pointsMode === "subtract"
+                            ? "bg-red-50 border-red-500 text-red-700"
+                            : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                        }`}
+                      >
+                        <TrendingDown className="w-4 h-4" />
+                        Subtract Points
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SELECT MEMBER */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Select Member</label>
                     <Select value={selectedUserId} onValueChange={setSelectedUserId}>
@@ -284,23 +341,95 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* CURRENT BALANCE INDICATOR */}
+                  {selectedUser && (
+                    <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${
+                      selectedUser.points_expired
+                        ? "bg-red-50 border-red-200"
+                        : "bg-amber-50 border-amber-200"
+                    }`}>
+                      <span className="text-sm font-medium text-gray-600">Current Balance</span>
+                      <span className={`text-lg font-bold ${
+                        selectedUser.points_expired ? "text-red-500 line-through" : "text-amber-700"
+                      }`}>
+                        {selectedUser.current_points} pts
+                        {selectedUser.points_expired && " (expired)"}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* POINTS AMOUNT */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Points to Add</label>
-                    <Input data-testid="points-input" type="number" placeholder="e.g., 100"
-                      value={pointsToAdd} onChange={(e) => setPointsToAdd(e.target.value)} min="1" />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Points to {pointsMode === "add" ? "Add" : "Subtract"}
+                    </label>
+                    <Input
+                      data-testid="points-input"
+                      type="number"
+                      placeholder="e.g., 100"
+                      value={pointsAmount}
+                      onChange={(e) => setPointsAmount(e.target.value)}
+                      min="1"
+                      className={pointsMode === "subtract" ? "border-red-300 focus:border-red-500" : ""}
+                    />
+                    {/* Preview new balance */}
+                    {selectedUser && pointsAmount && parseInt(pointsAmount) > 0 && (
+                      <p className="text-xs mt-1 text-gray-500">
+                        New balance:{" "}
+                        <strong className={
+                          pointsMode === "subtract"
+                            ? "text-red-600"
+                            : "text-green-600"
+                        }>
+                          {pointsMode === "add"
+                            ? selectedUser.current_points + parseInt(pointsAmount)
+                            : Math.max(0, selectedUser.current_points - parseInt(pointsAmount))
+                          } pts
+                        </strong>
+                      </p>
+                    )}
                   </div>
+
+                  {/* REASON */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                    <Input data-testid="reason-input" type="text" placeholder="e.g., Purchase, Bonus"
-                      value={reason} onChange={(e) => setReason(e.target.value)} />
+                    <Input
+                      data-testid="reason-input"
+                      type="text"
+                      placeholder={pointsMode === "add" ? "e.g., Purchase, Bonus" : "e.g., Correction, Penalty"}
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                    />
                   </div>
-                  <p className="text-xs text-gray-400">
-                    ℹ️ Adding points resets the expiry to 90 days from today.
-                  </p>
-                  <Button data-testid="add-points-btn" type="submit"
-                    disabled={isLoading || !selectedUserId || !pointsToAdd}
-                    className="bg-amber-600 hover:bg-amber-700 text-white">
-                    {isLoading ? "Adding..." : "Add Points"}
+
+                  {pointsMode === "add" && (
+                    <p className="text-xs text-gray-400">
+                      ℹ️ Adding points resets the expiry to 90 days from today.
+                    </p>
+                  )}
+                  {pointsMode === "subtract" && (
+                    <p className="text-xs text-red-400">
+                      ⚠️ Subtracting points does not affect the expiry date.
+                    </p>
+                  )}
+
+                  <Button
+                    data-testid="update-points-btn"
+                    type="submit"
+                    disabled={isLoading || !selectedUserId || !pointsAmount}
+                    className={`text-white ${
+                      pointsMode === "add"
+                        ? "bg-green-600 hover:bg-green-700"
+                        : "bg-red-600 hover:bg-red-700"
+                    }`}
+                  >
+                    {isLoading
+                      ? "Updating..."
+                      : pointsMode === "add"
+                      ? "Add Points"
+                      : "Subtract Points"
+                    }
                   </Button>
                 </form>
               </CardContent>
@@ -429,7 +558,6 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Expiry info inside modal */}
             {historyUser.points_expiry && (
               <div className={`mx-6 mt-4 rounded-xl px-4 py-2 flex items-center gap-2 text-sm ${
                 historyUser.points_expired ? "bg-red-50 text-red-600 border border-red-200"
